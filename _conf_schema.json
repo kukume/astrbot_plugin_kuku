@@ -1,0 +1,62 @@
+{
+  "rapid_key": {
+    "description": "RapidAPI Key（BIN 卡头查询）",
+    "type": "string",
+    "default": ""
+  },
+  "zhihu_url": {
+    "description": "网页截图/渲染服务地址",
+    "type": "string",
+    "default": "http://localhost:38127"
+  },
+  "xhs_url": {
+    "description": "小红书解析服务地址",
+    "type": "string",
+    "default": "http://localhost:5556"
+  },
+  "openai_api_key": {
+    "description": "OpenAI API Key",
+    "type": "string",
+    "default": ""
+  },
+  "openai_base_url": {
+    "description": "OpenAI Base URL",
+    "type": "string",
+    "default": "https://api.openai.com/v1"
+  },
+  "openai_image_model": {
+    "description": "OpenAI 图片模型",
+    "type": "string",
+    "default": "gpt-image-2"
+  },
+  "openai_video_model": {
+    "description": "视频生成模型",
+    "type": "string",
+    "default": "grok-imagine-video"
+  },
+  "s3_region": {
+    "description": "S3 Region",
+    "type": "string",
+    "default": ""
+  },
+  "s3_access_key_id": {
+    "description": "S3 Access Key ID",
+    "type": "string",
+    "default": ""
+  },
+  "s3_secret_access_key": {
+    "description": "S3 Secret Access Key",
+    "type": "string",
+    "default": ""
+  },
+  "s3_bucket": {
+    "description": "S3 Bucket",
+    "type": "string",
+    "default": ""
+  },
+  "s3_endpoint_url": {
+    "description": "S3 Endpoint URL",
+    "type": "string",
+    "default": ""
+  }
+}

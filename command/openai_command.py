@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import asyncio
+
+import astrbot.api.message_components as Comp
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent
+
+from di.commands import cmd
+from utils.helpers import extract_image_urls
+from logic.grok_logic import GrokLogic
+from logic.openai_logic import OpenaiLogic
+from utils.http_client import http_client
+
+_image_lock = asyncio.Lock()
+_video_lock = asyncio.Lock()
+
+
+def _rest_prompt(event: AstrMessageEvent, first: str, *cmd_names: str) -> str:
+    full = (event.message_str or "").strip()
+    for prefix in cmd_names:
+        if full.lower().startswith(prefix.lower()):
+            full = full[len(prefix) :].strip()
+            break
+    if full and (not first or len(full) > len(first)):
+        return full
+    return first or ""
+
+
+class OpenaiCommands:
+    @cmd("image")
+    async def image(self, event: AstrMessageEvent, prompt: str):
+        """AI 画图。用法: image a cat"""
+        prompt = _rest_prompt(event, prompt, "image", "/image")
+        if not prompt:
+            yield event.plain_result("请输入 prompt")
+            return
+        urls = extract_image_urls(event)
+        if len(urls) > 1:
+            yield event.plain_result("一次只能处理一张图片")
+            return
+        async with _image_lock:
+            yield event.plain_result("生成图片中")
+            try:
+                if len(urls) == 1:
+                    img_bytes = (await http_client.get(urls[0], follow_redirects=True)).content
+                    b64 = await OpenaiLogic.image(prompt, img_bytes)
+                else:
+                    b64 = await OpenaiLogic.image(prompt)
+                yield event.chain_result([Comp.Image.fromBase64(b64)])
+            except Exception as e:
+                logger.exception(e)
+                yield event.plain_result(f"生成图片失败: {e}")
+
+    @cmd("video")
+    async def video(self, event: AstrMessageEvent, prompt: str):
+        """AI 视频。用法: video a cat running"""
+        prompt = _rest_prompt(event, prompt, "video", "/video")
+        if not prompt:
+            yield event.plain_result("请输入 prompt")
+            return
+        async with _video_lock:
+            yield event.plain_result("生成视频中")
+            try:
+                url = await GrokLogic.video(prompt)
+                yield event.chain_result([Comp.Video.fromURL(url)])
+            except Exception as e:
+                logger.exception(e)
+                yield event.plain_result(f"生成视频失败: {e}")

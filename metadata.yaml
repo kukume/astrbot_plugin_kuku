@@ -1,0 +1,11 @@
+name: astrbot_plugin_kuku
+display_name: kuku
+desc: kuku
+version: 1.0.0
+author: kuku
+repo: https://github.com/kukume/astrbot_plugin_kuku
+short_desc: 工具
+support_platforms:
+  - aiocqhttp
+  - qq_official
+astrbot_version: ">=4.27.0"
