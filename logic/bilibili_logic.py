@@ -44,13 +44,17 @@ class Wbi:
 
     @classmethod
     async def enc(cls, params: dict[str, object]) -> str:
-        now = datetime.now(ZoneInfo("Asia/Shanghai"))
-        if not cls._img or not cls._sub or now.day != cls._day:
+        try:
+            now_day = datetime.now(ZoneInfo("Asia/Shanghai")).day
+        except Exception:
+            # Windows 未安装 tzdata 时 ZoneInfo 会失败
+            now_day = datetime.now().day
+        if not cls._img or not cls._sub or now_day != cls._day:
             data = (await http_client.get("https://api.bilibili.com/x/web-interface/nav", follow_redirects=True)).json()
             wbi = data["data"]["wbi_img"]
             cls._img = wbi["img_url"].split("/")[-1].removesuffix(".png")
             cls._sub = wbi["sub_url"].split("/")[-1].removesuffix(".png")
-            cls._day = now.day
+            cls._day = now_day
         raw = cls._img + cls._sub
         mixin = "".join(raw[i] for i in MIXIN_KEY_ENC_TAB)[:32]
         mutable = dict(params)
@@ -160,7 +164,19 @@ class BiliBiliLogic:
             output_path.unlink()
         try:
             await run_ffmpeg(
-                f'ffmpeg -y -i "{video_file}" -i "{audio_file}" -c:v copy -c:a aac -strict experimental "{output_path}"'
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(video_file.resolve()),
+                    "-i",
+                    str(audio_file.resolve()),
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "copy",
+                    str(output_path.resolve()),
+                ]
             )
         finally:
             video_file.unlink(missing_ok=True)

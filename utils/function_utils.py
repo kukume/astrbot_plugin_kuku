@@ -10,25 +10,13 @@ from .http_client import http_client
 logger = logging.getLogger("astrbot_plugin_kuku.command")
 
 
-async def run_ffmpeg(command: str) -> None:
-    """调用 ffmpeg（AstrBot 环境一般自带）。"""
-    is_windows = platform.system().lower().startswith("win")
-    if is_windows:
-        proc = await asyncio.create_subprocess_exec(
-            "cmd",
-            "/C",
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    else:
-        proc = await asyncio.create_subprocess_exec(
-            "/bin/sh",
-            "-c",
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+async def run_ffmpeg(args: list[str]) -> None:
+    """调用 ffmpeg（AstrBot 环境一般自带）。传参数列表，避免 Windows 走 cmd /C 把路径转义坏。"""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     stdout, stderr = await proc.communicate()
     if stdout:
         logger.info(stdout.decode(errors="ignore"))

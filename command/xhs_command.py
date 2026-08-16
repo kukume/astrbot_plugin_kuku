@@ -11,19 +11,21 @@ from di.commands import cmd, on_group
 from logic.xhs_logic import XhsDetail, XhsLogic
 
 
-def _build_xhs_chain(detail: XhsDetail) -> list:
+def _build_xhs_forward(event: AstrMessageEvent, detail: XhsDetail) -> Comp.Nodes:
     text = (
         f"标题：{detail.title}\n描述：{detail.description}\n"
         f"最后更新时间：{detail.update_time}\n作者：{detail.username}"
     )
-    chain: list = [Comp.Plain(text)]
+    uin = event.get_self_id()
+    name = "小红书"
     images = [u for u in detail.download_urls if not u.endswith(".mp4")]
     videos = [u for u in detail.download_urls if u.endswith(".mp4")]
+    nodes = [Comp.Node(uin=uin, name=name, content=[Comp.Plain(text)])]
     for video in videos:
-        chain.append(Comp.Video.fromURL(video))
+        nodes.append(Comp.Node(uin=uin, name=name, content=[Comp.Video.fromURL(video)]))
     for image in images:
-        chain.append(Comp.Image.fromURL(image))
-    return chain
+        nodes.append(Comp.Node(uin=uin, name=name, content=[Comp.Image.fromURL(image)]))
+    return Comp.Nodes(nodes)
 
 
 class XhsCommands:
@@ -42,7 +44,7 @@ class XhsCommands:
             return
         try:
             detail = await XhsLogic.detail(url)
-            yield event.chain_result(_build_xhs_chain(detail))
+            yield event.chain_result([_build_xhs_forward(event, detail)])
             pic = await zhihu_pic(url)
             b64 = base64.b64encode(pic).decode()
             yield event.chain_result([Comp.Image.fromBase64(b64)])
@@ -63,7 +65,7 @@ class XhsCommands:
             if "www.xiaohongshu.com" not in url and "xhslink.com" not in url:
                 return
             detail = await XhsLogic.detail(url)
-            yield event.chain_result(_build_xhs_chain(detail))
+            yield event.chain_result([_build_xhs_forward(event, detail)])
             pic = await zhihu_pic(url)
             b64 = base64.b64encode(pic).decode()
             yield event.chain_result([Comp.Image.fromBase64(b64)])
