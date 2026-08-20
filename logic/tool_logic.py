@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import html as html_lib
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 from curl_cffi import requests as cf_requests
+from PIL import Image
 
 from utils.cache import CacheManager
 from utils.config_holder import get_config
@@ -50,6 +55,19 @@ class Whois:
     nameserver: str | None
     creation_date: str | None
     expiry_date: str | None
+
+
+@dataclass
+class IcpRecord:
+    unit_name: str
+    nature_name: str
+    domain: str
+    main_licence: str
+    service_licence: str
+    update_record_time: str
+    content_type_name: str = ""
+    home_url: str = ""
+    service_name: str = ""
 
 
 class ToolLogic:
@@ -338,3 +356,188 @@ class ToolLogic:
             creation_date=mapping.get("Creation Date") or mapping.get("Registration Time"),
             expiry_date=mapping.get("Registry Expiry Date") or mapping.get("Expiration Time"),
         )
+
+    _ICP_API = "https://hlwicpfwc.miit.gov.cn/icpproject_query/api"
+    _ICP_ORIGIN = "https://beian.miit.gov.cn"
+
+    @staticmethod
+    def _normalize_icp_keyword(keyword: str) -> str:
+        text = (keyword or "").strip()
+        if not text:
+            raise RuntimeError("请输入域名、备案号或主办单位名称")
+        if re.match(r"^https?://", text, re.I) or text.lower().startswith("www."):
+            text = re.sub(r"^https?://", "", text, flags=re.I)
+            text = re.sub(r"^www\.", "", text, flags=re.I)
+            text = text.split("/", 1)[0].strip()
+        return text
+
+    @staticmethod
+    def _icp_slider_offset(big_b64: str, small_b64: str, height: int) -> int:
+        """定位大图上均匀浅灰缺口的左边缘，对应滑块 value。"""
+        big = Image.open(BytesIO(base64.b64decode(big_b64))).convert("RGB")
+        small = Image.open(BytesIO(base64.b64decode(small_b64)))
+        pw, ph = small.size
+        bw, bh = big.size
+        if pw <= 0 or ph <= 0 or bw <= pw or bh <= ph:
+            raise RuntimeError("验证码图片尺寸异常")
+        y = max(0, min(int(height or 0), bh - ph))
+        pixels = big.load()
+        best_x = 0
+        best_score = float("inf")
+        n = pw * ph
+        for x in range(0, bw - pw + 1):
+            rs = gs = bs = 0
+            for dy in range(ph):
+                for dx in range(pw):
+                    r, g, b = pixels[x + dx, y + dy]
+                    rs += r
+                    gs += g
+                    bs += b
+            mr, mg, mb = rs / n, gs / n, bs / n
+            var = 0.0
+            gray_dev = 0.0
+            for dy in range(ph):
+                for dx in range(pw):
+                    r, g, b = pixels[x + dx, y + dy]
+                    var += (r - mr) ** 2 + (g - mg) ** 2 + (b - mb) ** 2
+                    gray_dev += abs(r - g) + abs(g - b) + abs(r - b)
+            score = var / n + 10.0 * (gray_dev / n)
+            if score < best_score:
+                best_score = score
+                best_x = x
+        return best_x
+
+    @classmethod
+    def _icp_sync(cls, keyword: str) -> list[IcpRecord]:
+        keyword = cls._normalize_icp_keyword(keyword)
+        origin = cls._ICP_ORIGIN
+        api = cls._ICP_API
+        common_headers = {
+            "User-Agent": DEFAULT_UA,
+            "Origin": origin,
+            "Referer": f"{origin}/",
+            "Accept": "application/json, text/plain, */*",
+        }
+        with cf_requests.Session(impersonate="chrome") as session:
+            session.headers.update(common_headers)
+            ts = int(time.time() * 1000)
+            auth_key = hashlib.md5(f"testtest{ts}".encode()).hexdigest()
+            auth_resp = session.post(
+                f"{api}/auth",
+                data={"authKey": auth_key, "timeStamp": str(ts)},
+                headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
+                timeout=30,
+            )
+            auth_resp.raise_for_status()
+            auth_json = auth_resp.json()
+            if auth_json.get("code") != 200 or not (auth_json.get("params") or {}).get("bussiness"):
+                raise RuntimeError(auth_json.get("msg") or "获取 ICP token 失败")
+            token = auth_json["params"]["bussiness"]
+
+            sign = ""
+            image_uuid = ""
+            last_err = "滑块验证失败"
+            for _ in range(5):
+                captcha_resp = session.post(
+                    f"{api}/image/getCheckImagePoint",
+                    json={"clientUid": f"point-{uuid.uuid4()}"},
+                    headers={"token": token, "Content-Type": "application/json"},
+                    timeout=30,
+                )
+                captcha_resp.raise_for_status()
+                captcha_json = captcha_resp.json()
+                params = captcha_json.get("params") or {}
+                if captcha_json.get("code") != 200 or not params.get("uuid"):
+                    last_err = captcha_json.get("msg") or "获取验证码失败"
+                    continue
+                image_uuid = params["uuid"]
+                offset = cls._icp_slider_offset(
+                    params["bigImage"],
+                    params["smallImage"],
+                    int(params.get("height") or 0),
+                )
+                check_resp = session.post(
+                    f"{api}/image/checkImage",
+                    json={"key": image_uuid, "value": str(offset)},
+                    headers={"token": token, "Content-Type": "application/json"},
+                    timeout=30,
+                )
+                check_resp.raise_for_status()
+                check_json = check_resp.json()
+                if check_json.get("success") and check_json.get("params"):
+                    sign = check_json["params"]
+                    break
+                last_err = check_json.get("msg") or "滑块验证未通过"
+            if not sign:
+                raise RuntimeError(last_err)
+
+            query_headers = {
+                "token": token,
+                "uuid": image_uuid,
+                "sign": sign,
+                "Content-Type": "application/json",
+            }
+            query_resp = session.post(
+                f"{api}/icpAbbreviateInfo/queryByCondition",
+                json={
+                    "pageNum": "",
+                    "pageSize": "",
+                    "unitName": keyword,
+                    "serviceType": 1,
+                },
+                headers=query_headers,
+                timeout=30,
+            )
+            query_resp.raise_for_status()
+            query_json = query_resp.json()
+            if query_json.get("code") != 200:
+                raise RuntimeError(query_json.get("msg") or "ICP 查询失败")
+            items = ((query_json.get("params") or {}).get("list")) or []
+            if not items:
+                raise RuntimeError("未查询到备案信息")
+            rci = query_resp.headers.get("rci") or query_resp.headers.get("Rci") or ""
+
+            records: list[IcpRecord] = []
+            for item in items[:10]:
+                detail = item
+                try:
+                    detail_headers = dict(query_headers)
+                    if rci:
+                        detail_headers["rci"] = rci
+                    detail_resp = session.post(
+                        f"{api}/icpAbbreviateInfo/queryDetailByServiceIdAndDomainId",
+                        json={
+                            "mainId": item.get("mainId"),
+                            "domainId": item.get("domainId"),
+                            "serviceId": item.get("serviceId"),
+                        },
+                        headers=detail_headers,
+                        timeout=30,
+                    )
+                    detail_resp.raise_for_status()
+                    detail_json = detail_resp.json()
+                    if detail_json.get("code") == 200 and detail_json.get("params"):
+                        detail = {**item, **detail_json["params"]}
+                except Exception:  # noqa: BLE001
+                    detail = item
+                update_time = str(detail.get("updateRecordTime") or "")
+                if len(update_time) >= 10:
+                    update_time = update_time[:10]
+                records.append(
+                    IcpRecord(
+                        unit_name=str(detail.get("unitName") or ""),
+                        nature_name=str(detail.get("natureName") or ""),
+                        domain=str(detail.get("domain") or ""),
+                        main_licence=str(detail.get("mainLicence") or ""),
+                        service_licence=str(detail.get("serviceLicence") or ""),
+                        update_record_time=update_time,
+                        content_type_name=str(detail.get("contentTypeName") or ""),
+                        home_url=str(detail.get("homeUrl") or ""),
+                        service_name=str(detail.get("serviceName") or ""),
+                    )
+                )
+            return records
+
+    @classmethod
+    async def icp(cls, keyword: str) -> list[IcpRecord]:
+        return await asyncio.to_thread(cls._icp_sync, keyword)

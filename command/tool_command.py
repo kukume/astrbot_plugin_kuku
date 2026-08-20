@@ -174,6 +174,35 @@ class ToolCommands:
         except Exception as e:
             yield event.plain_result(f"失败: {e}")
 
+    @cmd("icp", alias={"备案"})
+    async def icp(self, event: AstrMessageEvent, keyword: str):
+        """ICP 备案查询。用法: icp qq.com / 备案 粤B2-20090059"""
+        if not keyword:
+            yield event.plain_result("请提供域名、备案号或主办单位名称")
+            return
+        try:
+            records = await ToolLogic.icp(keyword)
+            blocks = []
+            for i, item in enumerate(records, 1):
+                lines = [
+                    f"{i}." if len(records) > 1 else None,
+                    f"主办单位：{item.unit_name}" if item.unit_name else None,
+                    f"单位性质：{item.nature_name}" if item.nature_name else None,
+                    f"网站名称：{item.service_name}" if item.service_name else None,
+                    f"域名：{item.domain}" if item.domain else None,
+                    f"网站首页：{item.home_url}" if item.home_url else None,
+                    f"备案号：{item.main_licence}" if item.main_licence else None,
+                    f"网站备案号：{item.service_licence}" if item.service_licence else None,
+                    f"审核日期：{item.update_record_time}" if item.update_record_time else None,
+                    f"前置审批：{item.content_type_name}" if item.content_type_name else None,
+                ]
+                blocks.append("\n".join(line for line in lines if line))
+            prefix = f"共找到 {len(records)} 条备案信息\n\n" if len(records) > 1 else ""
+            yield event.plain_result(prefix + "\n\n".join(blocks))
+        except Exception as e:
+            logger.exception(e)
+            yield event.plain_result(f"失败: {e}")
+
     @cmd("whois", alias={"whoisf"})
     async def whois(self, event: AstrMessageEvent, domain: str):
         """Whois 查询。用法: whois example.com / whoisf example.com"""
