@@ -21,6 +21,7 @@ from utils.cache import CacheManager
 from utils.config_holder import get_config
 from utils.function_utils import segments_download
 from utils.http_client import DEFAULT_UA, http_client
+from utils.public_suffix import to_icp_domain
 from utils.regex_utils import extract
 
 
@@ -365,11 +366,10 @@ class ToolLogic:
         text = (keyword or "").strip()
         if not text:
             raise RuntimeError("请输入域名、备案号或主办单位名称")
-        if re.match(r"^https?://", text, re.I) or text.lower().startswith("www."):
-            text = re.sub(r"^https?://", "", text, flags=re.I)
-            text = re.sub(r"^www\.", "", text, flags=re.I)
-            text = text.split("/", 1)[0].strip()
-        return text
+        # 按 Public Suffix List：最长后缀再加一级，一级以上全部丢弃。
+        # 例如 www.qq.com -> qq.com；www.gov.cn 的后缀是 gov.cn，应保留 www.gov.cn。
+        domain = to_icp_domain(text)
+        return domain or text
 
     @staticmethod
     def _icp_slider_offset(big_b64: str, small_b64: str, height: int) -> int:
