@@ -17,12 +17,12 @@ from bs4 import BeautifulSoup
 from curl_cffi import requests as cf_requests
 from PIL import Image
 
-from utils.cache import CacheManager
-from utils.config_holder import get_config
-from utils.function_utils import segments_download
-from utils.http_client import DEFAULT_UA, curl_session, http_client
-from utils.public_suffix import to_icp_domain
-from utils.regex_utils import extract
+from ..utils.cache import CacheManager
+from ..utils.config_holder import get_config
+from ..utils.function_utils import segments_download
+from ..utils.http_client import DEFAULT_UA, curl_session, http_client
+from ..utils.public_suffix import to_icp_domain
+from ..utils.regex_utils import extract
 
 
 @dataclass

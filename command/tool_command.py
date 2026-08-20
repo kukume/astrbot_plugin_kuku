@@ -7,17 +7,16 @@ import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from di.commands import cmd
-
-from utils.helpers import (
+from ..di.commands import cmd
+from ..logic.bilibili_logic import BiliBiliLogic
+from ..logic.epic_logic import EpicLogic
+from ..logic.tool_logic import ToolLogic
+from ..utils.helpers import (
     extract_image_urls,
     send_video_lock,
     send_video_or_file,
 )
-from logic.bilibili_logic import BiliBiliLogic
-from logic.epic_logic import EpicLogic
-from logic.tool_logic import ToolLogic
-from utils.http_client import http_client
+from ..utils.http_client import http_client
 
 
 class ToolCommands:

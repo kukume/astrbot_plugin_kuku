@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from utils.http_client import http_client
+from ..utils.http_client import http_client
 
 _IMAGE_TYPE_PRIORITY = (
     "OfferImageWide",

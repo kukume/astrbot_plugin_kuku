@@ -5,8 +5,8 @@ import random
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from di.commands import on_group
-from utils.helpers import find_json_segment
+from ..di.commands import on_group
+from ..utils.helpers import find_json_segment
 
 _POEMS = [
     """网页明明能直达，偏偏甩你小程序。

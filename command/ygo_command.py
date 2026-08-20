@@ -5,8 +5,8 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.utils.session_waiter import SessionController, session_waiter
 
-from di.commands import cmd
-from logic.ygo_logic import YgoLogic
+from ..di.commands import cmd
+from ..logic.ygo_logic import YgoLogic
 
 
 class YgoCommands:

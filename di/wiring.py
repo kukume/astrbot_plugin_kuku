@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from astrbot.api import logger
 
-from di.commands import registry
+from .commands import registry
+from .. import command as command_pkg
 
 
 def setup_commands() -> None:
     """import command/* 并自动注册装饰器标记的指令。"""
     registry.clear()
-    n = registry.collect_from_command_package("command")
+    n = registry.collect_from_command_package(command_pkg.__name__)
     logger.info(f"[wiring] 从 command 包扫描到 {n} 个 handler")

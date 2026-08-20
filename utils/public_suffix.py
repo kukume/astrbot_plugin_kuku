@@ -93,7 +93,7 @@ def parse_psl(text: str) -> PublicSuffixList:
 
 
 def _download_psl() -> str:
-    from utils.config_holder import get_socks_proxy_url
+    from .config_holder import get_socks_proxy_url
 
     import httpx
 

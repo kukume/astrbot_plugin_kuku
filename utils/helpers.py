@@ -10,9 +10,9 @@ import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from utils.config_holder import get_config
-from utils.http_client import http_client
-from utils.s3_utils import S3Utils
+from .config_holder import get_config
+from .http_client import http_client
+from .s3_utils import S3Utils
 
 send_video_lock = asyncio.Lock()
 

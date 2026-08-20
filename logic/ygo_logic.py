@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from utils.http_client import http_client
+from ..utils.http_client import http_client
 
 
 @dataclass

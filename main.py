@@ -6,15 +6,42 @@ from pathlib import Path
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.star import Context, Star, register
 
-# 保证 logic/command/utils/di 可导入
 PLUGIN_DIR = Path(__file__).resolve().parent
-if str(PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(PLUGIN_DIR))
 
-from di.commands import registry  # noqa: E402
-from di.container import container  # noqa: E402
-from di.wiring import setup_commands  # noqa: E402
-from utils.config_holder import set_config  # noqa: E402
+
+def _drop_legacy_top_level_modules() -> None:
+    """
+    旧版曾把插件目录塞进 sys.path，子模块会以 di / command / logic / utils
+    这类顶层名留在 sys.modules 里。AstrBot 热重载只清 data.plugins.<插件>.*，
+    那些顶层名清不掉，更新后仍会复用旧代码。加载和卸载时按文件路径清掉。
+    """
+    plugin_root = str(PLUGIN_DIR)
+    while plugin_root in sys.path:
+        sys.path.remove(plugin_root)
+
+    prefix = __package__ or ""
+    for name, mod in list(sys.modules.items()):
+        if name in {"__main__", "__mp_main__"}:
+            continue
+        if prefix and (name == prefix or name.startswith(prefix + ".")):
+            continue
+        file = getattr(mod, "__file__", None)
+        if not file:
+            continue
+        try:
+            resolved = Path(file).resolve()
+        except OSError:
+            continue
+        if resolved.is_relative_to(PLUGIN_DIR):
+            del sys.modules[name]
+
+
+_drop_legacy_top_level_modules()
+
+from .di.commands import registry  # noqa: E402
+from .di.container import container  # noqa: E402
+from .di.wiring import setup_commands  # noqa: E402
+from .utils.config_holder import set_config  # noqa: E402
 
 
 @register(
@@ -47,6 +74,7 @@ class Main(Star):
 
     async def terminate(self):
         container.clear()
+        _drop_legacy_top_level_modules()
         logger.info("astrbot_plugin_kuku 已卸载")
 
 

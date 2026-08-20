@@ -6,9 +6,9 @@ import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from utils.helpers import find_json_segment, zhihu_pic
-from di.commands import cmd, on_group
-from logic.xhs_logic import XhsDetail, XhsLogic
+from ..di.commands import cmd, on_group
+from ..logic.xhs_logic import XhsDetail, XhsLogic
+from ..utils.helpers import find_json_segment, zhihu_pic
 
 
 def _build_xhs_forward(event: AstrMessageEvent, detail: XhsDetail) -> Comp.Nodes:

@@ -6,11 +6,11 @@ import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from di.commands import cmd
-from utils.helpers import extract_image_urls
-from logic.grok_logic import GrokLogic
-from logic.openai_logic import OpenaiLogic
-from utils.http_client import http_client
+from ..di.commands import cmd
+from ..logic.grok_logic import GrokLogic
+from ..logic.openai_logic import OpenaiLogic
+from ..utils.helpers import extract_image_urls
+from ..utils.http_client import http_client
 
 _image_lock = asyncio.Lock()
 _video_lock = asyncio.Lock()

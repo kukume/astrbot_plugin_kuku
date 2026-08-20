@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from utils.config_holder import get_socks_proxy_url
+from .config_holder import get_socks_proxy_url
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

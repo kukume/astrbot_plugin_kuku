@@ -6,8 +6,8 @@ import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from di.commands import cmd, on_group
-from utils.helpers import extract_url, find_json_segment, zhihu_pic
+from ..di.commands import cmd, on_group
+from ..utils.helpers import extract_url, find_json_segment, zhihu_pic
 
 
 class ZhiHuCommands:

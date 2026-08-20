@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from utils.config_holder import get_config
-from utils.http_client import http_client
+from ..utils.config_holder import get_config
+from ..utils.http_client import http_client
 
 
 @dataclass

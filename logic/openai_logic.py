@@ -4,7 +4,7 @@ import base64
 
 from openai import AsyncOpenAI
 
-from utils.config_holder import get_config
+from ..utils.config_holder import get_config
 
 
 def _detect_image_type_from_bytes(data: bytes) -> str | None:

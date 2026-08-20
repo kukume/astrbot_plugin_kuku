@@ -9,9 +9,9 @@ from pathlib import Path
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from utils.function_utils import run_ffmpeg, segments_download
-from utils.http_client import http_client
-from utils.regex_utils import extract
+from ..utils.function_utils import run_ffmpeg, segments_download
+from ..utils.http_client import http_client
+from ..utils.regex_utils import extract
 
 
 @dataclass
