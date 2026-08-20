@@ -8,4 +8,3 @@ short_desc: 工具
 support_platforms:
   - aiocqhttp
   - qq_official
-astrbot_version: ">=4.27.0"

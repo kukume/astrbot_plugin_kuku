@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -94,12 +93,22 @@ def parse_psl(text: str) -> PublicSuffixList:
 
 
 def _download_psl() -> str:
-    req = urllib.request.Request(
-        PSL_URL,
-        headers={"User-Agent": "astrbot_plugin_kuku/public-suffix"},
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.read().decode("utf-8")
+    from utils.config_holder import get_socks_proxy_url
+
+    import httpx
+
+    kwargs: dict = {
+        "timeout": 30.0,
+        "headers": {"User-Agent": "astrbot_plugin_kuku/public-suffix"},
+        "follow_redirects": True,
+    }
+    proxy = get_socks_proxy_url()
+    if proxy:
+        kwargs["proxy"] = proxy
+    with httpx.Client(**kwargs) as client:
+        resp = client.get(PSL_URL)
+        resp.raise_for_status()
+        return resp.text
 
 
 def _read_cache_file() -> str | None:

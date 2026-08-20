@@ -58,5 +58,17 @@
     "description": "S3 Endpoint URL",
     "type": "string",
     "default": ""
+  },
+  "socks_proxy_host": {
+    "description": "SOCKS 代理 IP（留空则不使用代理）",
+    "type": "string",
+    "hint": "例如 127.0.0.1",
+    "default": ""
+  },
+  "socks_proxy_port": {
+    "description": "SOCKS 代理端口（0 表示不使用代理）",
+    "type": "int",
+    "hint": "例如 1080",
+    "default": 0
   }
 }

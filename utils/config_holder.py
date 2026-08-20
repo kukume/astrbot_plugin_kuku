@@ -29,7 +29,23 @@ def get_config(key: str, default: Any = None) -> Any:
             "s3_secret_access_key": "S3_SECRET_ACCESS_KEY",
             "s3_bucket": "S3_BUCKET",
             "s3_endpoint_url": "S3_ENDPOINT_URL",
+            "socks_proxy_host": "SOCKS_PROXY_HOST",
+            "socks_proxy_port": "SOCKS_PROXY_PORT",
         }
         env_name = env_aliases.get(key, env_key)
         return os.getenv(env_name, default)
     return value
+
+
+def get_socks_proxy_url() -> str | None:
+    """有 IP 和端口时返回 socks5h://host:port，否则不走代理。"""
+    host = str(get_config("socks_proxy_host") or "").strip()
+    try:
+        port = int(get_config("socks_proxy_port") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if not host or port <= 0:
+        return None
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"socks5h://{host}:{port}"

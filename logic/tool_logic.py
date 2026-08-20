@@ -20,7 +20,7 @@ from PIL import Image
 from utils.cache import CacheManager
 from utils.config_holder import get_config
 from utils.function_utils import segments_download
-from utils.http_client import DEFAULT_UA, http_client
+from utils.http_client import DEFAULT_UA, curl_session, http_client
 from utils.public_suffix import to_icp_domain
 from utils.regex_utils import extract
 
@@ -213,7 +213,7 @@ class ToolLogic:
         """对应 Kotlin rateVisa(from, to, amt)；curl_cffi 过 Cloudflare。"""
         from_curr = from_curr.upper()
         to_curr = to_curr.upper()
-        with cf_requests.Session(impersonate="chrome") as session:
+        with curl_session() as session:
             currency = cls._load_currency_visa(session)
             if from_curr not in currency:
                 raise RuntimeError(f"incorrect currency: {from_curr}")
@@ -418,7 +418,7 @@ class ToolLogic:
             "Referer": f"{origin}/",
             "Accept": "application/json, text/plain, */*",
         }
-        with cf_requests.Session(impersonate="chrome") as session:
+        with curl_session() as session:
             session.headers.update(common_headers)
             ts = int(time.time() * 1000)
             auth_key = hashlib.md5(f"testtest{ts}".encode()).hexdigest()
