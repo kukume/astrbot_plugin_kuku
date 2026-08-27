@@ -36,7 +36,7 @@ class XhsLogic:
     @staticmethod
     async def detail(url: str) -> XhsDetail:
         base = (get_config("xhs_url") or "http://localhost:5556").rstrip("/")
-        resp = await http_client.post(
+        resp = await http_client.no_proxy.post(
             f"{base}/xhs/detail",
             json={"url": url},
             follow_redirects=True,

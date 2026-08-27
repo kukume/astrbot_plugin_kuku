@@ -72,7 +72,7 @@ def find_json_segment(event: AstrMessageEvent) -> dict[str, Any] | None:
 
 async def zhihu_pic(url: str) -> bytes:
     base = (get_config("zhihu_url") or "http://localhost:38127").rstrip("/")
-    resp = await http_client.post(
+    resp = await http_client.no_proxy.post(
         f"{base}/render",
         data={"url": url},
         follow_redirects=True,

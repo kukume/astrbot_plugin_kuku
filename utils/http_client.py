@@ -29,6 +29,7 @@ class _HttpClient:
 
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
+        self._direct: httpx.AsyncClient | None = None
         self._proxy: object = _UNSET
 
     def _get_client(self) -> httpx.AsyncClient:
@@ -37,6 +38,13 @@ class _HttpClient:
             self._proxy = proxy
             self._client = _build_async_client(proxy)
         return self._client
+
+    @property
+    def no_proxy(self) -> httpx.AsyncClient:
+        """不走 SOCKS。自建服务（xhs / 截图）用，避免 host.docker.internal 被代理解析。"""
+        if self._direct is None:
+            self._direct = _build_async_client(None)
+        return self._direct
 
     def __getattr__(self, name: str):
         return getattr(self._get_client(), name)
