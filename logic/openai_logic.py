@@ -5,6 +5,7 @@ import base64
 from openai import AsyncOpenAI
 
 from ..utils.config_holder import get_config
+from ..utils.http_client import http_client
 
 
 def _detect_image_type_from_bytes(data: bytes) -> str | None:
@@ -47,6 +48,13 @@ class OpenaiLogic:
             )
         data = result.data[0]
         b64 = getattr(data, "b64_json", None)
-        if not b64:
+        if b64:
+            return b64
+        url = getattr(data, "url", None)
+        if not url:
             raise RuntimeError("生成图片失败")
-        return b64
+        resp = await http_client.get(url, follow_redirects=True)
+        resp.raise_for_status()
+        if not resp.content:
+            raise RuntimeError("生成图片失败")
+        return base64.b64encode(resp.content).decode()
