@@ -42,15 +42,11 @@ class XhsCommands:
         if not url:
             yield event.plain_result("请提供小红书链接")
             return
-        try:
-            detail = await XhsLogic.detail(url)
-            yield event.chain_result([_build_xhs_forward(event, detail)])
-            pic = await zhihu_pic(url)
-            b64 = base64.b64encode(pic).decode()
-            yield event.chain_result([Comp.Image.fromBase64(b64)])
-        except Exception as e:
-            logger.exception(e)
-            yield event.plain_result(f"失败: {e}")
+        detail = await XhsLogic.detail(url)
+        yield event.chain_result([_build_xhs_forward(event, detail)])
+        pic = await zhihu_pic(url)
+        b64 = base64.b64encode(pic).decode()
+        yield event.chain_result([Comp.Image.fromBase64(b64)])
 
     @on_group()
     async def check_xhs_card(self, event: AstrMessageEvent):

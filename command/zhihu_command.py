@@ -21,13 +21,9 @@ class ZhiHuCommands:
         if not url:
             yield event.plain_result("未找到知乎回答链接")
             return
-        try:
-            data = await zhihu_pic(url)
-            b64 = base64.b64encode(data).decode()
-            yield event.chain_result([Comp.Image.fromBase64(b64)])
-        except Exception as e:
-            logger.exception(e)
-            yield event.plain_result(f"失败: {e}")
+        data = await zhihu_pic(url)
+        b64 = base64.b64encode(data).decode()
+        yield event.chain_result([Comp.Image.fromBase64(b64)])
 
     @cmd("ns")
     async def ns(self, event: AstrMessageEvent):
@@ -36,13 +32,9 @@ class ZhiHuCommands:
         if not url:
             yield event.plain_result("未找到 NodeSeek 链接")
             return
-        try:
-            data = await zhihu_pic(url)
-            b64 = base64.b64encode(data).decode()
-            yield event.chain_result([Comp.Image.fromBase64(b64)])
-        except Exception as e:
-            logger.exception(e)
-            yield event.plain_result(f"失败: {e}")
+        data = await zhihu_pic(url)
+        b64 = base64.b64encode(data).decode()
+        yield event.chain_result([Comp.Image.fromBase64(b64)])
 
     @cmd("ld")
     async def ld(self, event: AstrMessageEvent):
@@ -51,13 +43,9 @@ class ZhiHuCommands:
         if not url:
             yield event.plain_result("未找到 linux.do 链接")
             return
-        try:
-            data = await zhihu_pic(url)
-            b64 = base64.b64encode(data).decode()
-            yield event.chain_result([Comp.Image.fromBase64(b64)])
-        except Exception as e:
-            logger.exception(e)
-            yield event.plain_result(f"失败: {e}")
+        data = await zhihu_pic(url)
+        b64 = base64.b64encode(data).decode()
+        yield event.chain_result([Comp.Image.fromBase64(b64)])
 
     @on_group()
     async def check_zhihu_card(self, event: AstrMessageEvent):

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 
 import astrbot.api.message_components as Comp
-from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from ..di.commands import cmd
@@ -41,16 +40,12 @@ class OpenaiCommands:
             return
         async with _image_lock:
             yield event.plain_result("生成图片中")
-            try:
-                if len(urls) == 1:
-                    img_bytes = (await http_client.get(urls[0], follow_redirects=True)).content
-                    b64 = await OpenaiLogic.image(prompt, img_bytes)
-                else:
-                    b64 = await OpenaiLogic.image(prompt)
-                yield event.chain_result([Comp.Image.fromBase64(b64)])
-            except Exception as e:
-                logger.exception(e)
-                yield event.plain_result(f"生成图片失败: {e}")
+            if len(urls) == 1:
+                img_bytes = (await http_client.get(urls[0], follow_redirects=True)).content
+                b64 = await OpenaiLogic.image(prompt, img_bytes)
+            else:
+                b64 = await OpenaiLogic.image(prompt)
+            yield event.chain_result([Comp.Image.fromBase64(b64)])
 
     @cmd("video")
     async def video(self, event: AstrMessageEvent, prompt: str):
@@ -61,9 +56,5 @@ class OpenaiCommands:
             return
         async with _video_lock:
             yield event.plain_result("生成视频中")
-            try:
-                url = await GrokLogic.video(prompt)
-                yield event.chain_result([Comp.Video.fromURL(url)])
-            except Exception as e:
-                logger.exception(e)
-                yield event.plain_result(f"生成视频失败: {e}")
+            url = await GrokLogic.video(prompt)
+            yield event.chain_result([Comp.Video.fromURL(url)])
