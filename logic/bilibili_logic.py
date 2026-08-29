@@ -11,6 +11,12 @@ from zoneinfo import ZoneInfo
 
 from ..utils.function_utils import run_ffmpeg, segments_download
 from ..utils.http_client import http_client
+from ..utils.login_utils import (
+    QrcodeExpireException,
+    QrcodeNotScannedException,
+    QrcodeScannedException,
+    render_set_cookie,
+)
 from ..utils.regex_utils import extract
 
 
@@ -182,3 +188,68 @@ class BiliBiliLogic:
             video_file.unlink(missing_ok=True)
             audio_file.unlink(missing_ok=True)
         return BiliBiliVideo(title, desc, pic, owner_name, owner_mid, face, output_path)
+
+    @classmethod
+    async def login_by_qr1(cls) -> BiliBiliQrcode:
+        data = (
+            await http_client.get(
+                "https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header"
+            )
+        ).json()["data"]
+        return BiliBiliQrcode(url=data["url"], key=data["qrcode_key"])
+
+    @classmethod
+    async def login_by_qr2(cls, qrcode: BiliBiliQrcode) -> BiliBiliLogin:
+        response = await http_client.get(
+            "https://passport.bilibili.com/x/passport-login/web/qrcode/poll"
+            f"?qrcode_key={qrcode.key}&source=main-fe-header"
+        )
+        data = response.json()["data"]
+        code = int(data["code"])
+        if code == 86101:
+            raise QrcodeNotScannedException()
+        if code == 86090:
+            raise QrcodeScannedException()
+        if code == 86038:
+            raise QrcodeExpireException("哔哩哔哩二维码已超时")
+        if code != 0:
+            raise RuntimeError(data.get("message") or "哔哩哔哩登录失败")
+        first_cookie = render_set_cookie(response)
+        url = data["url"]
+        token_match = re.search(r"bili_jct=([^&\\]+)", url)
+        token = token_match.group(1) if token_match else ""
+        sso_json = (
+            await http_client.get(
+                f"https://passport.bilibili.com/x/passport-login/web/sso/list?biliCSRF={token}",
+                headers={"Cookie": first_cookie},
+            )
+        ).json()
+        cookie = ""
+        for inner_url in sso_json.get("data", {}).get("sso") or []:
+            inner = await http_client.post(
+                inner_url,
+                data={},
+                headers={
+                    "Referer": "https://www.bilibili.com/",
+                    "Origin": "https://www.bilibili.com",
+                },
+            )
+            cookie = render_set_cookie(inner)
+        userid_match = re.search(r"DedeUserID=([^;]+);", cookie)
+        userid = userid_match.group(1).strip() if userid_match else ""
+        finger = (await http_client.get("https://api.bilibili.com/x/frontend/finger/spi")).json()["data"]
+        finger_cookie = f"buvid3={finger['b_3']}; buvid4={finger['b_4']}; "
+        return BiliBiliLogin(cookie=cookie + finger_cookie, userid=userid, token=token)
+
+
+@dataclass
+class BiliBiliQrcode:
+    url: str
+    key: str
+
+
+@dataclass
+class BiliBiliLogin:
+    cookie: str
+    userid: str
+    token: str
