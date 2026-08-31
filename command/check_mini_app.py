@@ -34,9 +34,6 @@ class CheckMiniAppCommands:
             url = ((json_node.get("meta") or {}).get("detail_1") or {}).get("qqdocurl")
             if not url:
                 return
-            # 避免与知乎卡片处理器重复抢答：知乎交给 check_zhihu
-            if "www.zhihu.com/question" in url:
-                return
             yield event.plain_result(f"{random.choice(_POEMS)}\n{url}")
             event.stop_event()
         except Exception as e:

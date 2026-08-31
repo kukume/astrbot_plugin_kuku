@@ -4,11 +4,6 @@
     "type": "string",
     "default": ""
   },
-  "zhihu_url": {
-    "description": "网页截图/渲染服务地址",
-    "type": "string",
-    "default": "http://localhost:38127"
-  },
   "xhs_url": {
     "description": "小红书解析服务地址",
     "type": "string",

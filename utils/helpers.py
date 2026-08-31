@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import re
 from pathlib import Path
@@ -10,8 +11,6 @@ import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from .config_holder import get_config
-from .http_client import http_client
 from .s3_utils import S3Utils
 
 send_video_lock = asyncio.Lock()
@@ -70,15 +69,8 @@ def find_json_segment(event: AstrMessageEvent) -> dict[str, Any] | None:
     return None
 
 
-async def zhihu_pic(url: str) -> bytes:
-    base = (get_config("zhihu_url") or "http://localhost:38127").rstrip("/")
-    resp = await http_client.no_proxy.post(
-        f"{base}/render",
-        data={"url": url},
-        follow_redirects=True,
-    )
-    resp.raise_for_status()
-    return resp.content
+def png_component(data: bytes) -> Comp.Image:
+    return Comp.Image.fromBase64(base64.b64encode(data).decode())
 
 
 async def send_video_or_file(event: AstrMessageEvent, file_path: Path, filename: str | None = None):

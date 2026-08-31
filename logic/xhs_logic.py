@@ -17,6 +17,7 @@ class XhsDetail:
     username: str
     userid: str
     download_urls: list[str]
+    tags: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "XhsDetail":
@@ -29,6 +30,7 @@ class XhsDetail:
             username=str(data.get("作者昵称") or data.get("username") or ""),
             userid=str(data.get("作者ID") or data.get("userid") or ""),
             download_urls=list(data.get("下载地址") or data.get("download_urls") or []),
+            tags=str(data.get("作品标签") or data.get("tags") or ""),
         )
 
 
