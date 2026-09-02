@@ -73,6 +73,7 @@ class CardPage:
     avatar_url: str = ""
     avatar_referer: str | None = None
     created_time: str = ""
+    badge: str = ""
     items: list[dict] = field(default_factory=list)
 
 
@@ -596,7 +597,7 @@ async def render_nodeseek_image(data: CardPage) -> bytes:
     return to_png_bytes(bg, card)
 
 
-async def render_linuxdo_image(data: CardPage) -> bytes:
+async def render_linuxdo_image(data: CardPage, *, min_h: int = 2600) -> bytes:
     await ensure_fonts()
     w, pad = 1320, 56
     inner_w = w - pad * 4
@@ -622,6 +623,8 @@ async def render_linuxdo_image(data: CardPage) -> bytes:
         typ = it.get("type")
         if typ == "text":
             total_h += len(wrap_text(dummy, it.get("text") or "", body_font, inner_w)) * 38 + 20
+        elif typ == "heading":
+            total_h += len(wrap_text(dummy, it.get("text") or "", author_font, inner_w)) * 44 + 18
         elif typ == "code":
             total_h += len((it.get("text") or "").splitlines()) * 26 + 36
         elif typ == "quote":
@@ -639,18 +642,18 @@ async def render_linuxdo_image(data: CardPage) -> bytes:
             else:
                 prepared.append(None)
                 total_h += 96
-    total_h = max(total_h, 2600)
+    total_h = max(total_h, min_h)
 
     bg, card, cd = new_canvas(w, total_h, pad, bg=bg_c, card=card_c, line=line_c)
     x, y = pad + 44, 84
-    tag = "linux.do · 首楼"
+    tag = data.badge or "linux.do · 首楼"
     tag_box = cd.textbbox((0, 0), tag, font=label_font)
     cd.rounded_rectangle((x, y, x + (tag_box[2] - tag_box[0]) + 26, y + 44), radius=22, fill=(232, 240, 255, 255))
     cd.text((x + 13, y + 7), tag, font=label_font, fill=accent)
     y += 66
 
     if data.avatar_url:
-        avatar_img = await fetch_image(data.avatar_url)
+        avatar_img = await fetch_image(data.avatar_url, referer=data.avatar_referer)
         if avatar_img:
             _paste_avatar(card, avatar_img, x, y)
     cd.text((x + 136, y + 10), data.author_name or "", font=author_font, fill=text)
@@ -673,6 +676,9 @@ async def render_linuxdo_image(data: CardPage) -> bytes:
         if typ == "text":
             y = draw_wrapped(cd, it.get("text") or "", body_font, text, x, y, inner_w, line_gap=8)
             y += 18
+        elif typ == "heading":
+            y = draw_wrapped(cd, it.get("text") or "", author_font, text, x, y, inner_w, line_gap=8)
+            y += 16
         elif typ == "code":
             lines = (it.get("text") or "").splitlines()
             box_h = len(lines) * 26 + 24
@@ -1161,6 +1167,208 @@ def card_from_xhs(url: str, detail) -> CardPage:
     )
 
 
+_V2EX_ALERT_RE = re.compile(r"^\[!(WARNING|IMPORTANT|NOTE|TIP|CAUTION)\]\s*", re.I)
+_V2EX_TOPIC_RE = re.compile(r"/t/(\d+)")
+_V2EX_BLOCK_TAGS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "blockquote", "ul", "ol", "hr", "div"}
+
+
+def parse_v2ex_topic_id(url: str) -> str:
+    path = (urlparse(url).path or "").rstrip("/")
+    m = _V2EX_TOPIC_RE.search(path)
+    if not m:
+        raise ValueError("URL里没有找到 V2EX topic id")
+    return m.group(1)
+
+
+def _v2ex_abs(src: str) -> str:
+    if not src:
+        return ""
+    if src.startswith("//"):
+        return "https:" + src
+    if src.startswith("/"):
+        return "https://www.v2ex.com" + src
+    return src
+
+
+def _v2ex_avatar(member: dict) -> str:
+    for key in ("avatar_xxlarge", "avatar_xlarge", "avatar_large", "avatar_normal"):
+        url = _v2ex_abs((member.get(key) or "").strip())
+        if url:
+            if "gravatar" in url:
+                url = re.sub(r"([?&]s=)\d+", r"\g<1>240", url)
+            return url
+    return ""
+
+
+def parse_v2ex_content(html: str) -> list[dict]:
+    soup = BeautifulSoup(html or "", "html.parser")
+    container = soup.find("div", class_="markdown_body") or soup.body or soup
+    items: list[dict] = []
+
+    def add_text(text: str) -> None:
+        txt = _ld_norm(text)
+        if txt:
+            items.append({"type": "text", "text": txt})
+
+    def handle_block(node: Tag) -> None:
+        name = node.name
+        if name == "hr":
+            items.append({"type": "divider"})
+            return
+        if name in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            txt = _ld_norm(node.get_text(" ", strip=True))
+            if txt:
+                items.append({"type": "heading", "text": txt})
+            return
+        if name == "pre":
+            code = node.get_text("\n", strip=False).strip("\n")
+            if code.strip():
+                items.append({"type": "code", "text": code})
+            return
+        if name == "blockquote":
+            txt = _ld_norm(node.get_text("\n", strip=True))
+            txt = _V2EX_ALERT_RE.sub("", txt)
+            if txt:
+                items.append({"type": "quote", "author": "", "text": txt})
+            return
+        if name in ("ul", "ol"):
+            lines = []
+            for li in node.find_all("li", recursive=False):
+                txt = _ld_norm(li.get_text(" ", strip=True))
+                if txt:
+                    lines.append("• " + txt)
+            if lines:
+                items.append({"type": "text", "text": "\n".join(lines)})
+            return
+        buf: list[str] = []
+
+        def flush() -> None:
+            add_text("".join(buf))
+            buf.clear()
+
+        def walk(n) -> None:
+            if isinstance(n, NavigableString):
+                buf.append(str(n))
+                return
+            if not isinstance(n, Tag):
+                return
+            if n.name == "br":
+                buf.append("\n")
+                return
+            if n.name == "img":
+                flush()
+                src = _v2ex_abs(n.get("src") or n.get("data-src") or "")
+                if src:
+                    items.append({"type": "image", "src": src, "alt": n.get("alt") or ""})
+                return
+            if n.name in ("pre", "blockquote", "ul", "ol", "hr"):
+                flush()
+                handle_block(n)
+                return
+            for child in n.children:
+                walk(child)
+
+        walk(node)
+        flush()
+
+    children = list(container.children)
+    has_block = any(isinstance(c, Tag) and c.name in _V2EX_BLOCK_TAGS for c in children)
+    if not has_block:
+        handle_block(container)
+    else:
+        for child in children:
+            if isinstance(child, NavigableString):
+                add_text(str(child))
+            elif isinstance(child, Tag):
+                handle_block(child)
+
+    clean: list[dict] = []
+    for it in items:
+        if it.get("type") == "text" and not (it.get("text") or "").strip():
+            continue
+        if clean and it == clean[-1]:
+            continue
+        clean.append(it)
+    return clean
+
+
+def parse_v2ex_topic(url: str, payload: dict) -> CardPage:
+    topic_id = str(payload.get("id") or parse_v2ex_topic_id(url))
+    member = payload.get("member") or {}
+    node = payload.get("node") or {}
+    title = (payload.get("title") or "").strip()
+    node_title = (node.get("title") or node.get("name") or "").strip()
+    username = (member.get("username") or "").strip()
+    html = payload.get("content_rendered") or ""
+    if not html and payload.get("content"):
+        html = htmlmod.escape(str(payload.get("content"))).replace("\n", "<br />")
+    return CardPage(
+        platform="v2ex",
+        source_url=payload.get("url") or url,
+        answer_id=topic_id,
+        page_title=title,
+        question_title=title,
+        question_description=node_title,
+        author_name=username,
+        author_nickname=username,
+        avatar_url=_v2ex_avatar(member),
+        avatar_referer="https://www.v2ex.com/",
+        created_time=format_created_time(str(payload.get("created") or "")),
+        badge=f"V2EX · {node_title}" if node_title else "V2EX · 主帖",
+        items=parse_v2ex_content(html),
+    )
+
+
+def parse_v2ex_html(url: str, body: str) -> CardPage:
+    soup = BeautifulSoup(body, "html.parser")
+    header = soup.select_one(".header") or soup
+    title = _ns_norm(header.select_one("h1") or soup.select_one("h1"))
+    author_name = ""
+    for a in header.select('a[href^="/member/"]'):
+        txt = _ns_norm(a)
+        if txt:
+            author_name = txt
+            break
+    avatar_url = ""
+    img = header.select_one("img.avatar")
+    if img and img.get("src"):
+        avatar_url = _v2ex_abs(img.get("src"))
+        if "gravatar" in avatar_url:
+            avatar_url = re.sub(r"([?&]s=)\d+", r"\g<1>240", avatar_url)
+    node_title = ""
+    for a in header.select('a[href^="/go/"]'):
+        txt = _ns_norm(a)
+        if txt:
+            node_title = txt
+            break
+    created_time = ""
+    time_el = header.select_one("span[title]")
+    if time_el:
+        created_time = (time_el.get("title") or "").strip()
+    content = soup.select_one(".topic_content")
+    html = str(content) if content else ""
+    topic_id = parse_v2ex_topic_id(url)
+    return CardPage(
+        platform="v2ex",
+        source_url=url,
+        answer_id=topic_id,
+        page_title=title,
+        question_title=title,
+        question_description=node_title,
+        author_name=author_name,
+        author_nickname=author_name,
+        avatar_url=avatar_url,
+        avatar_referer="https://www.v2ex.com/",
+        created_time=created_time,
+        badge=f"V2EX · {node_title}" if node_title else "V2EX · 主帖",
+        items=parse_v2ex_content(html),
+    )
+
+
+async def render_v2ex_image(data: CardPage) -> bytes:
+    return await render_linuxdo_image(data, min_h=1200)
+
+
 async def render_nodeseek(url: str) -> bytes:
     data, _ = await fetch_bytes(url, referer="https://www.nodeseek.com/")
     return await render_nodeseek_image(parse_nodeseek_html(url, data.decode("utf-8", "ignore")))
@@ -1171,6 +1379,28 @@ async def render_linuxdo(url: str) -> bytes:
     raw, _ = await fetch_bytes(f"https://linux.do/t/topic/{topic_id}.json", referer="https://linux.do/")
     payload = json.loads(raw.decode("utf-8", "ignore"))
     return await render_linuxdo_image(parse_linuxdo_post(url, payload))
+
+
+async def render_v2ex(url: str) -> bytes:
+    topic_id = parse_v2ex_topic_id(url)
+    try:
+        raw, _ = await fetch_bytes(
+            f"https://www.v2ex.com/api/topics/show.json?id={topic_id}",
+            referer="https://www.v2ex.com/",
+        )
+        payload = json.loads(raw.decode("utf-8", "ignore"))
+        if isinstance(payload, list):
+            if not payload:
+                raise ValueError("V2EX 帖子不存在")
+            payload = payload[0]
+        if not isinstance(payload, dict) or not payload.get("id"):
+            raise ValueError("V2EX API 返回异常")
+        page = parse_v2ex_topic(url, payload)
+    except Exception as e:
+        logger.warning(f"v2ex api failed, fallback html: {e}")
+        raw, _ = await fetch_bytes(f"https://www.v2ex.com/t/{topic_id}", referer="https://www.v2ex.com/")
+        page = parse_v2ex_html(url, raw.decode("utf-8", "ignore"))
+    return await render_v2ex_image(page)
 
 
 async def render_xhs(url: str, detail=None) -> bytes:
