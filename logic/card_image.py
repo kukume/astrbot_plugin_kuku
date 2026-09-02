@@ -596,13 +596,21 @@ async def render_nodeseek_image(data: CardPage) -> bytes:
     return to_png_bytes(bg, card)
 
 
-async def render_linuxdo_image(data: CardPage) -> bytes:
+async def render_forum_image(
+    data: CardPage,
+    *,
+    badge: str,
+    accent: str = "#2563eb",
+    badge_bg: tuple[int, int, int, int] = (232, 240, 255, 255),
+    quote_bar: str = "#93c5fd",
+    min_height: int = 2600,
+) -> bytes:
     await ensure_fonts()
     w, pad = 1320, 56
     inner_w = w - pad * 4
     bg_c, card_c, text, muted, line_c = "#f5f7fb", "#ffffff", "#111827", "#6b7280", "#e5e7eb"
-    accent, pre_bg, pre_text = "#2563eb", "#111827", "#e5e7eb"
-    quote_bg, quote_bar = "#f8fafc", "#93c5fd"
+    pre_bg, pre_text = "#111827", "#e5e7eb"
+    quote_bg = "#f8fafc"
 
     title_font = load_font(46, bold=True)
     body_font = load_font(30)
@@ -614,7 +622,7 @@ async def render_linuxdo_image(data: CardPage) -> bytes:
 
     title_lines = wrap_text(dummy, data.question_title or data.page_title, title_font, inner_w)
     img_urls = [it["src"] for it in data.items if it.get("type") == "image"]
-    raw_images = await fetch_images(img_urls)
+    raw_images = await fetch_images(img_urls, referer=data.source_url or data.avatar_referer)
     prepared: list[Image.Image | None] = []
     total_h = 220 + len(title_lines) * 60 + 220
     img_i = 0
@@ -639,18 +647,18 @@ async def render_linuxdo_image(data: CardPage) -> bytes:
             else:
                 prepared.append(None)
                 total_h += 96
-    total_h = max(total_h, 2600)
+    total_h = max(total_h, min_height)
 
     bg, card, cd = new_canvas(w, total_h, pad, bg=bg_c, card=card_c, line=line_c)
     x, y = pad + 44, 84
-    tag = "linux.do · 首楼"
+    tag = badge
     tag_box = cd.textbbox((0, 0), tag, font=label_font)
-    cd.rounded_rectangle((x, y, x + (tag_box[2] - tag_box[0]) + 26, y + 44), radius=22, fill=(232, 240, 255, 255))
+    cd.rounded_rectangle((x, y, x + (tag_box[2] - tag_box[0]) + 26, y + 44), radius=22, fill=badge_bg)
     cd.text((x + 13, y + 7), tag, font=label_font, fill=accent)
     y += 66
 
     if data.avatar_url:
-        avatar_img = await fetch_image(data.avatar_url)
+        avatar_img = await fetch_image(data.avatar_url, referer=data.avatar_referer or data.source_url)
         if avatar_img:
             _paste_avatar(card, avatar_img, x, y)
     cd.text((x + 136, y + 10), data.author_name or "", font=author_font, fill=text)
@@ -713,6 +721,22 @@ async def render_linuxdo_image(data: CardPage) -> bytes:
                 y += 96
 
     return to_png_bytes(bg, card)
+
+
+async def render_linuxdo_image(data: CardPage) -> bytes:
+    return await render_forum_image(data, badge="linux.do · 首楼")
+
+
+async def render_v2ex_image(data: CardPage) -> bytes:
+    node = (data.question_description or "").strip()
+    badge = f"V2EX · {node}" if node else "V2EX · 主题"
+    return await render_forum_image(
+        data,
+        badge=badge,
+        accent="#778087",
+        badge_bg=(236, 239, 241, 255),
+        min_height=1400,
+    )
 
 
 async def render_xhs_image(data: CardPage) -> bytes:
@@ -995,6 +1019,228 @@ def parse_nodeseek_html(url: str, body: str) -> CardPage:
     )
 
 
+def parse_v2ex_topic_id(url: str) -> str:
+    path = (urlparse(url).path or "").rstrip("/")
+    m = re.search(r"/t/(\d+)", path)
+    if m:
+        return m.group(1)
+    raise ValueError("URL里没有找到 V2EX topic id")
+
+
+def _v2ex_abs(src: str) -> str:
+    if not src:
+        return ""
+    if src.startswith("//"):
+        return "https:" + src
+    if src.startswith("/"):
+        return "https://www.v2ex.com" + src
+    return src
+
+
+def _v2ex_upgrade_avatar(src: str) -> str:
+    if not src:
+        return ""
+    for size in ("_xxlarge", "_xlarge", "_large", "_normal", "_mini"):
+        if size in src:
+            return src.replace(size, "_xxlarge")
+    return src
+
+
+def _v2ex_norm(s: str) -> str:
+    s = (s or "").replace("\xa0", " ")
+    s = re.sub(r"[ \t]+", " ", s)
+    s = re.sub(r" *\n *", "\n", s)
+    return s.strip()
+
+
+_V2EX_IMG_EXT = re.compile(r"\.(?:png|jpe?g|gif|webp|bmp)(?:\?|$)", re.I)
+
+
+def parse_v2ex_content(html: str) -> list[dict]:
+    soup = BeautifulSoup(html or "", "html.parser")
+    root = soup.select_one(".topic_content") or soup.select_one(".markdown_body") or (soup.body or soup)
+    items: list[dict] = []
+    seen: set[str] = set()
+
+    def add_img(src: str, alt: str = "") -> None:
+        src = _v2ex_abs(src)
+        if not src or src in seen:
+            return
+        low = src.lower()
+        if "/static/" in low or "data:image" in low:
+            return
+        seen.add(src)
+        items.append({"type": "image", "src": src, "alt": alt})
+
+    def flush(buf: list[str]) -> None:
+        txt = _v2ex_norm("".join(buf))
+        buf.clear()
+        if txt:
+            items.append({"type": "text", "text": txt})
+
+    def walk(node, buf: list[str]) -> None:
+        if isinstance(node, NavigableString):
+            buf.append(str(node))
+            return
+        if not isinstance(node, Tag):
+            return
+        if node.name in ("script", "style"):
+            return
+        if node.name == "br":
+            buf.append("\n")
+            return
+        if node.name == "img":
+            flush(buf)
+            add_img(node.get("src") or "", node.get("alt") or "")
+            return
+        if node.name == "pre":
+            flush(buf)
+            code = node.get_text("\n", strip=False).strip("\n")
+            if code.strip():
+                items.append({"type": "code", "text": code})
+            return
+        if node.name == "blockquote":
+            flush(buf)
+            qtxt = _v2ex_norm(node.get_text("\n", strip=True))
+            if qtxt:
+                items.append({"type": "quote", "text": qtxt})
+            return
+        if node.name in ("ul", "ol"):
+            flush(buf)
+            lines: list[str] = []
+            for i, li in enumerate(node.find_all("li", recursive=False), 1):
+                txt = _v2ex_norm(li.get_text(" ", strip=True))
+                if txt:
+                    prefix = f"{i}. " if node.name == "ol" else "• "
+                    lines.append(prefix + txt)
+            if lines:
+                items.append({"type": "text", "text": "\n".join(lines)})
+            return
+        if node.name == "hr":
+            flush(buf)
+            items.append({"type": "divider"})
+            return
+        if node.name == "a":
+            img = node.find("img")
+            href = node.get("href") or ""
+            if img:
+                flush(buf)
+                src = img.get("src") or href
+                href_abs = _v2ex_abs(href)
+                if href_abs and _V2EX_IMG_EXT.search(href_abs):
+                    src = href
+                add_img(src, img.get("alt") or "")
+                return
+            buf.append(node.get_text(" ", strip=True) or href)
+            return
+        if node.name in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            flush(buf)
+            txt = _v2ex_norm(node.get_text(" ", strip=True))
+            if txt:
+                items.append({"type": "text", "text": txt})
+            return
+        if node.name in ("p", "div"):
+            for child in node.children:
+                walk(child, buf)
+            flush(buf)
+            return
+        for child in node.children:
+            walk(child, buf)
+
+    buf: list[str] = []
+    for child in list(root.children):
+        walk(child, buf)
+    flush(buf)
+
+    clean: list[dict] = []
+    for it in items:
+        if it.get("type") == "text" and not (it.get("text") or "").strip():
+            continue
+        if clean and it == clean[-1]:
+            continue
+        clean.append(it)
+    return clean
+
+
+def parse_v2ex_topic(url: str, payload: dict) -> CardPage:
+    topic_id = str(payload.get("id") or parse_v2ex_topic_id(url))
+    member = payload.get("member") or {}
+    node = payload.get("node") or {}
+    author = member.get("username") or ""
+    avatar = (
+        member.get("avatar_xxlarge")
+        or member.get("avatar_xlarge")
+        or member.get("avatar_large")
+        or member.get("avatar_normal")
+        or ""
+    )
+    items = parse_v2ex_content(payload.get("content_rendered") or "")
+    if not items and (payload.get("content") or "").strip():
+        items = [{"type": "text", "text": _v2ex_norm(payload.get("content") or "")}]
+    created = payload.get("created")
+    created_time = format_created_time(str(created) if created is not None else "")
+    title = payload.get("title") or ""
+    node_title = node.get("title") or node.get("name") or ""
+    return CardPage(
+        platform="v2ex",
+        source_url=url,
+        answer_id=topic_id,
+        page_title=title,
+        question_title=title,
+        question_description=node_title,
+        author_name=author,
+        author_nickname=author,
+        avatar_url=_v2ex_abs(_v2ex_upgrade_avatar(avatar)),
+        avatar_referer="https://www.v2ex.com/",
+        created_time=created_time,
+        items=items,
+    )
+
+
+def parse_v2ex_html(url: str, body: str) -> CardPage:
+    soup = BeautifulSoup(body, "html.parser")
+    title = _ns_norm(soup.select_one("#Main h1") or soup.select_one("h1"))
+    node_title = ""
+    for a in soup.select('#Main .header a[href^="/go/"]'):
+        txt = _ns_norm(a)
+        if txt and txt.lower() != "v2ex":
+            node_title = txt
+            break
+    author = ""
+    gray = soup.select_one("#Main .header small.gray")
+    if gray:
+        a = gray.find("a")
+        if a:
+            author = _ns_norm(a)
+    created_time = ""
+    time_el = soup.select_one('#Main .header small.gray span[title]')
+    if time_el:
+        created_time = (time_el.get("title") or "").strip() or _ns_norm(time_el)
+    avatar_url = ""
+    img = soup.select_one("#Main .header img.avatar")
+    if img and img.get("src"):
+        avatar_url = _v2ex_abs(_v2ex_upgrade_avatar(img.get("src") or ""))
+    content = soup.select_one("#Main .topic_content")
+    items = parse_v2ex_content(str(content) if content else "")
+    topic_id = parse_v2ex_topic_id(url)
+    if not title and not items:
+        raise ValueError("V2EX 帖子没有主题数据")
+    return CardPage(
+        platform="v2ex",
+        source_url=url,
+        answer_id=topic_id,
+        page_title=title,
+        question_title=title,
+        question_description=node_title,
+        author_name=author,
+        author_nickname=author,
+        avatar_url=avatar_url,
+        avatar_referer="https://www.v2ex.com/",
+        created_time=created_time,
+        items=items,
+    )
+
+
 def parse_linuxdo_topic_id(url: str) -> str:
     path = (urlparse(url).path or "").rstrip("/")
     for pat in (r"/t/topic/(\d+)", r"/t/[^/]+/(\d+)", r"/t/(\d+)", r"/topic/(\d+)"):
@@ -1171,6 +1417,26 @@ async def render_linuxdo(url: str) -> bytes:
     raw, _ = await fetch_bytes(f"https://linux.do/t/topic/{topic_id}.json", referer="https://linux.do/")
     payload = json.loads(raw.decode("utf-8", "ignore"))
     return await render_linuxdo_image(parse_linuxdo_post(url, payload))
+
+
+async def render_v2ex(url: str) -> bytes:
+    topic_id = parse_v2ex_topic_id(url)
+    canonical = f"https://www.v2ex.com/t/{topic_id}"
+    try:
+        raw, _ = await fetch_bytes(
+            f"https://www.v2ex.com/api/topics/show.json?id={topic_id}",
+            referer="https://www.v2ex.com/",
+        )
+        payload = json.loads(raw.decode("utf-8", "ignore"))
+        if isinstance(payload, list) and payload:
+            return await render_v2ex_image(parse_v2ex_topic(canonical, payload[0]))
+        if isinstance(payload, dict) and payload.get("id"):
+            return await render_v2ex_image(parse_v2ex_topic(canonical, payload))
+        logger.warning("v2ex api empty, fallback html")
+    except Exception as e:
+        logger.warning(f"v2ex api failed, fallback html: {e}")
+    data, _ = await fetch_bytes(canonical, referer="https://www.v2ex.com/")
+    return await render_v2ex_image(parse_v2ex_html(canonical, data.decode("utf-8", "ignore")))
 
 
 async def render_xhs(url: str, detail=None) -> bytes:
