@@ -114,25 +114,6 @@ def rsa_encrypt_to_hex(text: str, public_key_b64: str) -> str:
     return base64.b64decode(rsa_encrypt(text, public_key_b64)).hex()
 
 
-def aes_cbc_decrypt_nopadding(key: bytes, iv: bytes, data: bytes) -> bytes:
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-    decryptor = cipher.decryptor()
-    return decryptor.update(data) + decryptor.finalize()
-
-
-def hostloc_prepare_cookie(html: str) -> str:
-    group = re.findall(r'(?<=toNumbers\(").*?(?="\))', html)
-    if not group:
-        return ""
-    a = bytes(int(group[0][i : i + 2], 16) for i in range(0, len(group[0]), 2))
-    b = bytes(int(group[1][i : i + 2], 16) for i in range(0, len(group[1]), 2))
-    c = bytes(int(group[2][i : i + 2], 16) for i in range(0, len(group[2]), 2))
-    decrypted = aes_cbc_decrypt_nopadding(a, b, c)
-    return f"cnsL7={decrypted.hex()}; "
-
-
 def aes_cbc_encrypt(plain: str, key: str, iv: str) -> bytes:
     from cryptography.hazmat.primitives import padding as sym_padding
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes

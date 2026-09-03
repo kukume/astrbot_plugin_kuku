@@ -14,10 +14,10 @@ from ..logic.baidu_logic import BaiduLogic
 from ..logic.bilibili_logic import BiliBiliLogic
 from ..logic.douyu_logic import DouYuLogic
 from ..logic.ecloud_logic import ECloudLogic
-from ..logic.hostloc_logic import HostLocLogic
 from ..logic.huya_logic import HuYaLogic
 from ..logic.kugou_logic import KuGouLogic
 from ..logic.mihoyo_logic import MiHoYoLogic
+from ..logic.netease_logic import NetEaseLogic
 from ..logic.smzdm_logic import SmZdmLogic
 from ..logic.step_logic import LeXinStepLogic, XiaomiStepLogic
 from ..logic.weibo_logic import WeiboLogic
@@ -29,12 +29,12 @@ _PLATFORMS: list[tuple[str, str]] = [
     ("biliBili", "哔哩哔哩"),
     ("douYu", "斗鱼"),
     ("kuGou", "酷狗"),
+    ("netEase", "网易云音乐"),
     ("miHoYo", "米哈游"),
     ("step", "刷步数"),
     ("weibo", "微博"),
     ("smZdm", "什么值得买"),
     ("eCloud", "天翼云盘"),
-    ("hostLoc", "HostLoc"),
     ("huYa", "虎牙"),
 ]
 
@@ -43,6 +43,10 @@ _METHODS: dict[str, list[tuple[str, str]]] = {
     "biliBili": [("qr", "使用哔哩哔哩APP扫码登录")],
     "douYu": [("qr", "使用斗鱼APP扫码登录")],
     "kuGou": [("sms", "使用手机验证码登录")],
+    "netEase": [
+        ("qr", "使用网易云音乐APP扫码登录"),
+        ("sms", "使用手机验证码登录"),
+    ],
     "miHoYo": [("qr", "使用米游社APP扫码登录")],
     "step": [
         ("xiaomi", "小米运动账号密码登录"),
@@ -54,7 +58,6 @@ _METHODS: dict[str, list[tuple[str, str]]] = {
         ("app", "使用APP扫码登录"),
     ],
     "eCloud": [("password", "使用密码登录")],
-    "hostLoc": [("password", "使用密码登录")],
     "huYa": [("qr", "使用虎牙APP扫码登录")],
 }
 
@@ -204,16 +207,20 @@ async def _handle(
         return
 
     if step == "code":
-        result = await KuGouLogic.verify_code(state["phone"], text, state["mid"])
-        await _send_result(
-            evt,
-            {
-                "token": result.token,
-                "userid": result.userid,
-                "kuGoo": result.ku_goo,
-                "mid": result.mid,
-            },
-        )
+        if state["platform"] == "netEase":
+            result = await NetEaseLogic.login_by_sms(state["netease"], text)
+            await _send_result(evt, {"cookie": result.cookie})
+        else:
+            result = await KuGouLogic.verify_code(state["phone"], text, state["mid"])
+            await _send_result(
+                evt,
+                {
+                    "token": result.token,
+                    "userid": result.userid,
+                    "kuGoo": result.ku_goo,
+                    "mid": result.mid,
+                },
+            )
         controller.stop()
         return
 
@@ -234,14 +241,14 @@ async def _start_method(
         return
     if method == "sms":
         state["step"] = "phone"
-        await evt.send(evt.plain_result("请发送酷狗登录的手机号"))
+        prompt = "请发送网易云登录的手机号" if platform == "netEase" else "请发送酷狗登录的手机号"
+        await evt.send(evt.plain_result(prompt))
         controller.keep(timeout=180, reset_timeout=True)
         return
     if method in {"password", "xiaomi", "lexin"}:
         state["step"] = "account"
         prompts = {
             "eCloud": ("请发送天翼云盘账号", "请发送天翼云盘密码"),
-            "hostLoc": ("请发送HostLoc账号", "请发送HostLoc密码"),
             "xiaomi": ("请发送小米运动手机号", "请发送小米运动密码"),
             "lexin": ("请发送乐心运动手机号", "请发送乐心运动密码"),
         }
@@ -276,6 +283,14 @@ async def _run_qrcode(evt: AstrMessageEvent, platform: str, method: str) -> None
         await _send_image(evt, make_qrcode(qr.url), "请使用斗鱼app扫码二维码登录")
         result = await _poll_qrcode(
             lambda: DouYuLogic.check_qrcode(qr), tries=20, timeout_message="斗鱼登录二维码已失效"
+        )
+        await _send_result(evt, {"cookie": result.cookie})
+        return
+    if platform == "netEase":
+        qr = await NetEaseLogic.get_qrcode()
+        await _send_image(evt, make_qrcode(qr.url), "请使用网易云音乐App扫描以下二维码登录")
+        result = await _poll_qrcode(
+            lambda: NetEaseLogic.check_qrcode(qr), tries=20, timeout_message="网易云二维码已过期"
         )
         await _send_result(evt, {"cookie": result.cookie})
         return
@@ -337,10 +352,6 @@ async def _finish_password(evt: AstrMessageEvent, state: dict[str, Any], passwor
         result = await ECloudLogic.login(account, password)
         await _send_result(evt, {"cookie": result.cookie, "eCookie": result.e_cookie})
         return
-    if platform == "hostLoc":
-        cookie = await HostLocLogic.login(account, password)
-        await _send_result(evt, {"cookie": cookie})
-        return
     if method == "xiaomi":
         result = await XiaomiStepLogic.login(account, password)
         await _send_result(evt, {"miLoginToken": result.mi_login_token})
@@ -365,6 +376,13 @@ async def _finish_phone(
     state: dict[str, Any],
     phone: str,
 ) -> None:
+    if state["platform"] == "netEase":
+        session = await NetEaseLogic.send_code(phone)
+        state["step"] = "code"
+        state["netease"] = session
+        await evt.send(evt.plain_result("请发送网易云登录的验证码"))
+        controller.keep(timeout=180, reset_timeout=True)
+        return
     mid = KuGouLogic.mid()
     await KuGouLogic.send_mobile_code(phone, mid)
     state["step"] = "code"
