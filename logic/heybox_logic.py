@@ -232,6 +232,13 @@ def _detail_from_link(link: dict[str, Any], link_id: str) -> HeyboxDetail:
         url = _upgrade_image(str(extra))
         if url and url not in images and not is_heybox_video_url(url):
             images.append(url)
+    for extra in (link.get("video_url"),):
+        url = _https(str(extra or "").strip())
+        if url and url not in videos:
+            videos.append(url)
+    thumb = _upgrade_image(str(link.get("video_thumb") or ""))
+    if thumb and thumb not in images:
+        images.append(thumb)
     topics = []
     for topic in link.get("topics") or []:
         if isinstance(topic, dict):
