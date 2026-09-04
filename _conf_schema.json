@@ -4,11 +4,6 @@
     "type": "string",
     "default": ""
   },
-  "xhs_url": {
-    "description": "小红书解析服务地址",
-    "type": "string",
-    "default": "http://localhost:5556"
-  },
   "openai_api_key": {
     "description": "OpenAI API Key",
     "type": "string",

@@ -41,7 +41,7 @@ class _HttpClient:
 
     @property
     def no_proxy(self) -> httpx.AsyncClient:
-        """不走 SOCKS。自建服务（xhs / 截图）用，避免 host.docker.internal 被代理解析。"""
+        """不走 SOCKS。本机服务用，避免 host.docker.internal 被代理解析。"""
         if self._direct is None:
             self._direct = _build_async_client(None)
         return self._direct

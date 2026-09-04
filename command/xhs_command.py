@@ -6,7 +6,7 @@ from astrbot.api.event import AstrMessageEvent
 
 from ..di.commands import cmd, on_group
 from ..logic.card_image import render_xhs
-from ..logic.xhs_logic import XhsDetail, XhsLogic
+from ..logic.xhs_logic import XhsDetail, XhsLogic, is_xhs_url, is_xhs_video_url
 from ..utils.helpers import find_json_segment, png_component
 
 
@@ -17,8 +17,8 @@ def _build_xhs_forward(event: AstrMessageEvent, detail: XhsDetail) -> Comp.Nodes
     )
     uin = event.get_self_id()
     name = "小红书"
-    images = [u for u in detail.download_urls if not str(u).lower().endswith(".mp4")]
-    videos = [u for u in detail.download_urls if str(u).lower().endswith(".mp4")]
+    videos = list(detail.video_urls) or [u for u in detail.download_urls if is_xhs_video_url(u)]
+    images = [u for u in detail.download_urls if u not in videos and not is_xhs_video_url(u)]
     nodes = [Comp.Node(uin=uin, name=name, content=[Comp.Plain(text)])]
     for video in videos:
         nodes.append(Comp.Node(uin=uin, name=name, content=[Comp.Video.fromURL(video)]))
@@ -59,7 +59,7 @@ class XhsCommands:
             url = ((json_node.get("meta") or {}).get("news") or {}).get("jumpUrl")
             if not url:
                 return
-            if "www.xiaohongshu.com" not in url and "xhslink.com" not in url:
+            if not is_xhs_url(url):
                 return
             detail = await XhsLogic.detail(url)
             yield event.chain_result([_build_xhs_forward(event, detail)])

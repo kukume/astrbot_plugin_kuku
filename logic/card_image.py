@@ -738,9 +738,9 @@ async def render_xhs_image(data: CardPage) -> bytes:
 
     title_lines = wrap_text(dummy, data.question_title or data.page_title, title_font, inner_w)
     img_urls = [it["src"] for it in data.items if it.get("type") == "image"]
-    raw_images = await fetch_images(img_urls)
+    raw_images = await fetch_images(img_urls, referer="https://www.xiaohongshu.com/")
     prepared: list[Image.Image | None] = []
-    total_h = 120 + len(title_lines) * 68 + 160
+    total_h = 120 + len(title_lines) * 68 + (200 if data.avatar_url or data.author_name else 80)
     img_i = 0
     for it in data.items:
         if it.get("type") == "text":
@@ -762,7 +762,16 @@ async def render_xhs_image(data: CardPage) -> bytes:
     for line in title_lines:
         cd.text((x, y), line, font=title_font, fill=text)
         y += 68
-    if data.author_name:
+    avatar_img = None
+    if data.avatar_url:
+        avatar_img = await fetch_image(data.avatar_url, referer=data.avatar_referer or "https://www.xiaohongshu.com/")
+    if avatar_img:
+        _paste_avatar(card, avatar_img, x, y)
+        cd.text((x + 136, y + 18), data.author_name or "", font=author_font, fill=accent)
+        if data.created_time:
+            cd.text((x + 136, y + 60), data.created_time, font=small_font, fill=muted)
+        y += 136
+    elif data.author_name:
         author_text = "by " + data.author_name
         box = cd.textbbox((0, 0), author_text, font=author_font)
         cd.rounded_rectangle((x, y + 4, x + (box[2] - box[0]) + 26, y + 46), radius=20, fill=author_bg)
@@ -1139,6 +1148,8 @@ def parse_linuxdo_post(url: str, payload: dict) -> CardPage:
 
 
 def card_from_xhs(url: str, detail) -> CardPage:
+    from .xhs_logic import is_xhs_video_url
+
     items: list[dict] = []
     if getattr(detail, "description", ""):
         items.append({"type": "text", "label": "内容", "text": detail.description})
@@ -1148,8 +1159,9 @@ def card_from_xhs(url: str, detail) -> CardPage:
         items.append({"type": "text", "label": "发布时间", "text": detail.push_time})
     if getattr(detail, "update_time", ""):
         items.append({"type": "text", "label": "最后更新时间", "text": detail.update_time})
+    videos = set(getattr(detail, "video_urls", None) or [])
     for src in getattr(detail, "download_urls", None) or []:
-        if src and not str(src).lower().endswith(".mp4"):
+        if src and src not in videos and not is_xhs_video_url(str(src)):
             items.append({"type": "image", "src": str(src)})
     answer_id = str(getattr(detail, "id", "") or int(datetime.now().timestamp()))
     title = getattr(detail, "title", "") or ""
@@ -1162,6 +1174,8 @@ def card_from_xhs(url: str, detail) -> CardPage:
         question_title=title,
         author_name=author,
         author_nickname=author,
+        avatar_url=getattr(detail, "avatar", "") or "",
+        avatar_referer="https://www.xiaohongshu.com/",
         created_time=getattr(detail, "push_time", "") or "",
         items=items,
     )
