@@ -31,13 +31,7 @@ class XhsCommands:
     @cmd("xhs")
     async def xhs(self, event: AstrMessageEvent, url: str):
         """小红书解析。用法: xhs https://..."""
-        full = (event.message_str or "").strip()
-        for prefix in ("xhs", "/xhs"):
-            if full.lower().startswith(prefix):
-                full = full[len(prefix) :].strip()
-                break
-        if full and (not url or len(full) > len(url)):
-            url = full
+        url = (url or "").strip()
         if not url:
             yield event.plain_result("请提供小红书链接")
             return

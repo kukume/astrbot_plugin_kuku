@@ -10,9 +10,9 @@ from ..utils.helpers import extract_url, png_component
 
 class ZhiHuCommands:
     @cmd("ns")
-    async def ns(self, event: AstrMessageEvent):
+    async def ns(self, event: AstrMessageEvent, url: str):
         """NodeSeek 帖子截图"""
-        url = extract_url(event.message_str, r"https://www\.nodeseek\.com/post-\d+(?:-\d+)?")
+        url = extract_url(url, r"https://www\.nodeseek\.com/post-\d+(?:-\d+)?") or (url or "").strip()
         if not url:
             yield event.plain_result("未找到 NodeSeek 链接")
             return
@@ -25,9 +25,9 @@ class ZhiHuCommands:
         yield event.chain_result([png_component(data)])
 
     @cmd("ld")
-    async def ld(self, event: AstrMessageEvent):
+    async def ld(self, event: AstrMessageEvent, url: str):
         """Linux.do 帖子截图"""
-        url = extract_url(event.message_str, r"https://linux\.do/t/[^\s]+")
+        url = extract_url(url, r"https://linux\.do/t/[^\s]+") or (url or "").strip()
         if not url:
             yield event.plain_result("未找到 linux.do 链接")
             return
@@ -40,9 +40,9 @@ class ZhiHuCommands:
         yield event.chain_result([png_component(data)])
 
     @cmd("v2ex")
-    async def v2ex(self, event: AstrMessageEvent):
+    async def v2ex(self, event: AstrMessageEvent, url: str):
         """V2EX 帖子截图"""
-        url = extract_url(event.message_str, r"https?://(?:www\.|cn\.)?v2ex\.com/t/\d+")
+        url = extract_url(url, r"https?://(?:www\.|cn\.)?v2ex\.com/t/\d+") or (url or "").strip()
         if not url:
             yield event.plain_result("未找到 V2EX 链接")
             return

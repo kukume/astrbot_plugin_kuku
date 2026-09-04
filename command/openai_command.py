@@ -15,22 +15,11 @@ _image_lock = asyncio.Lock()
 _video_lock = asyncio.Lock()
 
 
-def _rest_prompt(event: AstrMessageEvent, first: str, *cmd_names: str) -> str:
-    full = (event.message_str or "").strip()
-    for prefix in cmd_names:
-        if full.lower().startswith(prefix.lower()):
-            full = full[len(prefix) :].strip()
-            break
-    if full and (not first or len(full) > len(first)):
-        return full
-    return first or ""
-
-
 class OpenaiCommands:
     @cmd("image")
     async def image(self, event: AstrMessageEvent, prompt: str):
         """AI 画图。用法: image a cat"""
-        prompt = _rest_prompt(event, prompt, "image", "/image")
+        prompt = (prompt or "").strip()
         if not prompt:
             yield event.plain_result("请输入 prompt")
             return
@@ -50,7 +39,7 @@ class OpenaiCommands:
     @cmd("video")
     async def video(self, event: AstrMessageEvent, prompt: str):
         """AI 视频。用法: video a cat running"""
-        prompt = _rest_prompt(event, prompt, "video", "/video")
+        prompt = (prompt or "").strip()
         if not prompt:
             yield event.plain_result("请输入 prompt")
             return

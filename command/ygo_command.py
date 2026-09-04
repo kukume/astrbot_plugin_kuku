@@ -12,13 +12,7 @@ class YgoCommands:
     @cmd("ygo")
     async def ygo(self, event: AstrMessageEvent, name: str):
         """游戏王查卡。用法: ygo 青眼白龙"""
-        full = (event.message_str or "").strip()
-        for prefix in ("ygo", "/ygo"):
-            if full.lower().startswith(prefix):
-                full = full[len(prefix) :].strip()
-                break
-        if full and (not name or len(full) > len(name)):
-            name = full
+        name = (name or "").strip()
         if not name:
             yield event.plain_result("请输入卡片名称")
             return

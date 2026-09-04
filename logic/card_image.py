@@ -1423,3 +1423,44 @@ async def render_xhs(url: str, detail=None) -> bytes:
     if detail is None:
         detail = await XhsLogic.detail(url)
     return await render_xhs_image(card_from_xhs(url, detail))
+
+
+def card_from_heybox(url: str, detail) -> CardPage:
+    items: list[dict] = []
+    if getattr(detail, "description", ""):
+        items.append({"type": "text", "text": detail.description})
+    if getattr(detail, "tags", ""):
+        items.append({"type": "text", "text": "#" + " #".join(str(detail.tags).split())})
+    for src in getattr(detail, "images", None) or []:
+        if src:
+            items.append({"type": "image", "src": str(src)})
+    topic = getattr(detail, "topic", "") or ""
+    author = getattr(detail, "username", "") or ""
+    title = getattr(detail, "title", "") or ""
+    created = getattr(detail, "push_time", "") or ""
+    ip_location = getattr(detail, "ip_location", "") or ""
+    if ip_location:
+        created = f"{created} · {ip_location}".strip(" ·")
+    return CardPage(
+        platform="heybox",
+        source_url=url,
+        answer_id=str(getattr(detail, "id", "") or int(datetime.now().timestamp())),
+        page_title=title,
+        question_title=title,
+        author_name=author,
+        author_nickname=author,
+        avatar_url=getattr(detail, "avatar", "") or "",
+        avatar_referer="https://www.xiaoheihe.cn/",
+        created_time=created,
+        badge=f"小黑盒 · {topic}" if topic else "小黑盒",
+        items=items,
+    )
+
+
+async def render_heybox(url: str, detail=None) -> bytes:
+    from .heybox_logic import HeyboxLogic
+
+    if detail is None:
+        detail = await HeyboxLogic.detail(url)
+    return await render_linuxdo_image(card_from_heybox(url, detail), min_h=1200)
+

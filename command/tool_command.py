@@ -29,14 +29,7 @@ class ToolCommands:
     @cmd("bv")
     async def bv(self, event: AstrMessageEvent, param: str):
         """根据 BV 号/链接发送 B 站视频。用法: bv BV1xx / bv https://..."""
-        rest = (event.message_str or "").strip()
-        if rest and param and not rest.startswith(param):
-            for prefix in ("bv", "/bv"):
-                if rest.lower().startswith(prefix):
-                    rest = rest[len(prefix) :].strip()
-                    break
-            if len(rest) > len(param):
-                param = rest
+        param = (param or "").strip()
         if not param:
             yield event.plain_result("请提供 BV 号或链接")
             return
@@ -54,14 +47,7 @@ class ToolCommands:
     @cmd("dy")
     async def dy(self, event: AstrMessageEvent, link: str):
         """抖音视频下载。用法: dy https://v.douyin.com/xxx"""
-        param = link
-        msg = (event.message_str or "").strip()
-        for prefix in ("dy", "/dy"):
-            if msg.lower().startswith(prefix):
-                msg = msg[len(prefix) :].strip()
-                break
-        if msg and len(msg) > len(link):
-            param = msg
+        param = (link or "").strip()
         if not param:
             yield event.plain_result("请提供抖音链接")
             return
